@@ -51,21 +51,6 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
         preds = maskNet.predict(faces, batch_size=32)
 
     return (locs, preds)
-
-def find_working_camera():
-    """Finds and returns the first working camera index."""
-    for index in range(10):  # Test camera indices from 0 to 9
-        cap = cv2.VideoCapture(index)
-        if cap.isOpened():
-            ret, frame = cap.read()
-            if ret:
-                print(f"Camera found at index: {index}")
-                cap.release()  # Release the camera
-                return index
-        cap.release()
-    print("No working camera found!")
-    return None
-
 # Add tab navigation
 tabs = st.tabs(["Detection", "About the Project"])
 
@@ -76,37 +61,32 @@ with tabs[0]:
 
     detect = st.checkbox("Detect")
     FRAME_WINDOW = st.image([])
-    camera_index = find_working_camera()
+    camera = cv2.VideoCapture(0)
 
-    if camera_index is not None:
-        camera = cv2.VideoCapture(camera_index)
+    if detect:
+        while detect:
+            ret, frame = camera.read()
+            if not ret:
+                st.error("Unable to access the webcam.")
+                break
 
-        if detect:
-            while detect:
-                ret, frame = camera.read()
-                if not ret:
-                    st.error("Unable to access the webcam.")
-                    break
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            (locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
 
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                (locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
+            for (box, pred) in zip(locs, preds):
+                (startX, startY, endX, endY) = box
+                (mask, withoutMask) = pred
 
-                for (box, pred) in zip(locs, preds):
-                    (startX, startY, endX, endY) = box
-                    (mask, withoutMask) = pred
+                label = "Mask" if mask > withoutMask else "No Mask"
+                color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
+                label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
 
-                    label = "Mask" if mask > withoutMask else "No Mask"
-                    color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
-                    label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
+                cv2.rectangle(frame, (startX, startY), (endX, endY), color, 3)
+                cv2.putText(frame, label, (startX, startY - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
 
-                    cv2.rectangle(frame, (startX, startY), (endX, endY), color, 3)
-                    cv2.putText(frame, label, (startX, startY - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-
-                FRAME_WINDOW.image(frame)
-        else:
-            camera.release()
+            FRAME_WINDOW.image(frame)
     else:
-        st.error("No accessible camera available.")
+        camera.release()
 
 with tabs[1]:
     # About the Project Page
